@@ -83,7 +83,7 @@ There's a few things you can do right now to help out:
 ## Supported Go Versions
 
 We test against and support the two most recent major releases of Go. This is
-informed by Go's own [security policy](https://go.dev/security).
+informed by Go's own [security policy](https://go.dev/doc/security/policy).
 
 # Notable Users
 Some notable users of go-libp2p are:
