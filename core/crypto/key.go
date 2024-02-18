@@ -4,7 +4,7 @@
 package crypto
 
 import (
-	"crypto/elliptic"
+	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
@@ -127,44 +127,39 @@ func GenerateKeyPairWithReader(typ, bits int, src io.Reader) (PrivKey, PubKey, e
 //
 // Focuses only on ECDH now, but can be made more general in the future.
 func GenerateEKeyPair(curveName string) ([]byte, GenSharedKey, error) {
-	var curve elliptic.Curve
+	var curve ecdh.Curve
 
 	switch curveName {
 	case "P-256":
-		curve = elliptic.P256()
+		curve = ecdh.P256()
 	case "P-384":
-		curve = elliptic.P384()
+		curve = ecdh.P384()
 	case "P-521":
-		curve = elliptic.P521()
+		curve = ecdh.P521()
 	default:
 		return nil, nil, fmt.Errorf("unknown curve name")
 	}
 
-	priv, x, y, err := elliptic.GenerateKey(curve, rand.Reader)
+	priv, err := curve.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	pubKey := elliptic.Marshal(curve, x, y)
-
 	done := func(theirPub []byte) ([]byte, error) {
 		// Verify and unpack node's public key.
-		x, y := elliptic.Unmarshal(curve, theirPub)
-		if x == nil {
+		pubKey, err := curve.NewPublicKey(theirPub)
+		if err == nil {
 			return nil, fmt.Errorf("malformed public key: %d %v", len(theirPub), theirPub)
 		}
 
-		if !curve.IsOnCurve(x, y) {
-			return nil, errors.New("invalid public key")
+		secret, err := priv.ECDH(pubKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to do ecdh: %w", err)
 		}
-
-		// Generate shared secret.
-		secret, _ := curve.ScalarMult(x, y, priv)
-
-		return secret.Bytes(), nil
+		return secret, nil
 	}
 
-	return pubKey, done, nil
+	return priv.PublicKey().Bytes(), done, nil
 }
 
 // UnmarshalPublicKey converts a protobuf serialized public key into its

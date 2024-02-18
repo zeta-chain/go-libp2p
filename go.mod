@@ -1,6 +1,6 @@
 module github.com/libp2p/go-libp2p
 
-go 1.20
+go 1.21
 
 retract v0.26.1 // Tag was applied incorrectly due to a bug in the release workflow.
 
@@ -32,7 +32,6 @@ require (
 	github.com/libp2p/zeroconf/v2 v2.2.0
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b
-	github.com/minio/sha256-simd v1.0.1
 	github.com/mr-tron/base58 v1.2.0
 	github.com/multiformats/go-base32 v0.1.0
 	github.com/multiformats/go-multiaddr v0.12.2
@@ -98,6 +97,7 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/miekg/dns v1.1.56 // indirect
 	github.com/mikioh/tcpopt v0.0.0-20190314235656-172688c1accc // indirect
+	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/multiformats/go-base36 v0.2.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.13.0 // indirect
 	github.com/opencontainers/runtime-spec v1.1.0 // indirect
