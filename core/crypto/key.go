@@ -4,12 +4,10 @@
 package crypto
 
 import (
-	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/crypto/pb"
@@ -120,46 +118,6 @@ func GenerateKeyPairWithReader(typ, bits int, src io.Reader) (PrivKey, PubKey, e
 	default:
 		return nil, nil, ErrBadKeyType
 	}
-}
-
-// GenerateEKeyPair returns an ephemeral public key and returns a function that will compute
-// the shared secret key.  Used in the identify module.
-//
-// Focuses only on ECDH now, but can be made more general in the future.
-func GenerateEKeyPair(curveName string) ([]byte, GenSharedKey, error) {
-	var curve ecdh.Curve
-
-	switch curveName {
-	case "P-256":
-		curve = ecdh.P256()
-	case "P-384":
-		curve = ecdh.P384()
-	case "P-521":
-		curve = ecdh.P521()
-	default:
-		return nil, nil, fmt.Errorf("unknown curve name")
-	}
-
-	priv, err := curve.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	done := func(theirPub []byte) ([]byte, error) {
-		// Verify and unpack node's public key.
-		pubKey, err := curve.NewPublicKey(theirPub)
-		if err == nil {
-			return nil, fmt.Errorf("malformed public key: %d %v", len(theirPub), theirPub)
-		}
-
-		secret, err := priv.ECDH(pubKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to do ecdh: %w", err)
-		}
-		return secret, nil
-	}
-
-	return priv.PublicKey().Bytes(), done, nil
 }
 
 // UnmarshalPublicKey converts a protobuf serialized public key into its
