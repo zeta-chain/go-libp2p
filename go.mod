@@ -50,7 +50,7 @@ require (
 	github.com/pion/webrtc/v3 v3.2.9
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.4.0
-	github.com/quic-go/quic-go v0.39.3
+	github.com/quic-go/quic-go v0.41.0
 	github.com/quic-go/webtransport-go v0.6.0
 	github.com/raulk/go-watchdog v1.3.0
 	github.com/stretchr/testify v1.8.4
@@ -117,7 +117,6 @@ require (
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
-	github.com/quic-go/qtls-go1-20 v0.3.4 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/syndtr/goleveldb v1.0.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
