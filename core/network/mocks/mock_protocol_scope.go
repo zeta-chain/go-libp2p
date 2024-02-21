@@ -5,6 +5,7 @@
 //
 //	mockgen -package mocknetwork -destination mock_protocol_scope.go github.com/libp2p/go-libp2p/core/network ProtocolScope
 //
+
 // Package mocknetwork is a generated GoMock package.
 package mocknetwork
 

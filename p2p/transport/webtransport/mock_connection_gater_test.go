@@ -5,6 +5,7 @@
 //
 //	mockgen -package libp2pwebtransport_test -destination mock_connection_gater_test.go github.com/libp2p/go-libp2p/core/connmgr ConnectionGater
 //
+
 // Package libp2pwebtransport_test is a generated GoMock package.
 package libp2pwebtransport_test
 

@@ -5,6 +5,7 @@
 //
 //	mockgen -package libp2pquic -destination mock_connection_gater_test.go github.com/libp2p/go-libp2p/core/connmgr ConnectionGater
 //
+
 // Package libp2pquic is a generated GoMock package.
 package libp2pquic
 

@@ -5,6 +5,7 @@
 //
 //	mockgen -package transport_integration -destination mock_connection_gater_test.go github.com/libp2p/go-libp2p/core/connmgr ConnectionGater
 //
+
 // Package transport_integration is a generated GoMock package.
 package transport_integration
 

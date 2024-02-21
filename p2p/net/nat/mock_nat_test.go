@@ -5,6 +5,7 @@
 //
 //	mockgen -package nat -destination mock_nat_test.go github.com/libp2p/go-nat NAT
 //
+
 // Package nat is a generated GoMock package.
 package nat
 

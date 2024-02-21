@@ -5,6 +5,7 @@
 //
 //	mockgen -package mocknetwork -destination mock_conn_management_scope.go github.com/libp2p/go-libp2p/core/network ConnManagementScope
 //
+
 // Package mocknetwork is a generated GoMock package.
 package mocknetwork
 

@@ -5,6 +5,7 @@
 //
 //	mockgen -package mocknetwork -destination mock_resource_manager.go github.com/libp2p/go-libp2p/core/network ResourceManager
 //
+
 // Package mocknetwork is a generated GoMock package.
 package mocknetwork
 

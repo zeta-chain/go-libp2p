@@ -5,6 +5,7 @@
 //
 //	mockgen -package pstoremanager_test -destination mock_peerstore_test.go github.com/libp2p/go-libp2p/core/peerstore Peerstore
 //
+
 // Package pstoremanager_test is a generated GoMock package.
 package pstoremanager_test
 

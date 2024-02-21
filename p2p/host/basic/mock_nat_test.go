@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags=-tags=gomock -package basichost -destination mock_nat_test.go github.com/libp2p/go-libp2p/p2p/host/basic NAT
 //
+
 // Package basichost is a generated GoMock package.
 package basichost
 

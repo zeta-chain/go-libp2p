@@ -5,6 +5,7 @@
 //
 //	mockgen -package mocknetwork -destination mock_stream_management_scope.go github.com/libp2p/go-libp2p/core/network StreamManagementScope
 //
+
 // Package mocknetwork is a generated GoMock package.
 package mocknetwork
 

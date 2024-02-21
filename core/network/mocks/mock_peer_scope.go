@@ -5,6 +5,7 @@
 //
 //	mockgen -package mocknetwork -destination mock_peer_scope.go github.com/libp2p/go-libp2p/core/network PeerScope
 //
+
 // Package mocknetwork is a generated GoMock package.
 package mocknetwork
 

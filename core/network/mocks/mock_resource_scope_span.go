@@ -5,6 +5,7 @@
 //
 //	mockgen -package mocknetwork -destination mock_resource_scope_span.go github.com/libp2p/go-libp2p/core/network ResourceScopeSpan
 //
+
 // Package mocknetwork is a generated GoMock package.
 package mocknetwork
 
