@@ -17,7 +17,10 @@ import (
 
 var log = logging.Logger("webrtc-udpmux")
 
-const ReceiveMTU = 1500
+// ReceiveBufSize is the size of the buffer used to receive packets from the PacketConn.
+// It is fine for this number to be higher than the actual path MTU as this value is not
+// used to decide the packet size on the write path.
+const ReceiveBufSize = 1500
 
 type Candidate struct {
 	Ufrag string
@@ -134,7 +137,7 @@ func (mux *UDPMux) readLoop() {
 		default:
 		}
 
-		buf := pool.Get(ReceiveMTU)
+		buf := pool.Get(ReceiveBufSize)
 
 		n, addr, err := mux.socket.ReadFrom(buf)
 		if err != nil {

@@ -264,7 +264,7 @@ func (l *listener) setupConnection(
 		}
 	}
 
-	rwc, err := getDetachedChannel(ctx, rawDatachannel)
+	rwc, err := detachHandshakeDataChannel(ctx, rawDatachannel)
 	if err != nil {
 		return nil, err
 	}
