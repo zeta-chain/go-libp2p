@@ -255,6 +255,9 @@ func ufragFromSTUNMessage(msg *stun.Message) (string, error) {
 	return string(attr[index+1:]), nil
 }
 
+// RemoveConnByUfrag removes the connection associated with the ufrag and all the
+// addresses associated with that connection. This method is called by pion when
+// a peerconnection is closed.
 func (mux *UDPMux) RemoveConnByUfrag(ufrag string) {
 	if ufrag == "" {
 		return

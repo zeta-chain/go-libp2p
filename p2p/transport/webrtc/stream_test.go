@@ -366,7 +366,7 @@ func TestStreamCloseAfterFINACK(t *testing.T) {
 	select {
 	case <-done:
 		t.Fatalf("Close should not have completed without processing FIN_ACK")
-	case <-time.After(2 * time.Second):
+	case <-time.After(200 * time.Millisecond):
 	}
 
 	b := make([]byte, 1)

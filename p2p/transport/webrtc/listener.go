@@ -57,6 +57,7 @@ type listener struct {
 	// used to control the lifecycle of the listener
 	ctx    context.Context
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 var _ tpt.Listener = &listener{}
@@ -91,30 +92,27 @@ func newListener(transport *WebRTCTransport, laddr ma.Multiaddr, socket net.Pack
 	}
 
 	l.ctx, l.cancel = context.WithCancel(context.Background())
-	mux := udpmux.NewUDPMux(socket)
-	l.mux = mux
-	mux.Start()
+	l.mux = udpmux.NewUDPMux(socket)
+	l.mux.Start()
 
-	go l.listen()
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		l.listen()
+	}()
 
 	return l, err
 }
 
 func (l *listener) listen() {
-	// Accepting a connection requires instantiating a peerconnection
-	// and a noise connection which is expensive. We therefore limit
-	// the number of in-flight connection requests. A connection
-	// is considered to be in flight from the instant it is handled
-	// until it is dequeued by a call to Accept, or errors out in some
-	// way.
-	inFlightQueueCh := make(chan struct{}, l.transport.maxInFlightConnections)
-	for i := uint32(0); i < l.transport.maxInFlightConnections; i++ {
-		inFlightQueueCh <- struct{}{}
-	}
-
+	// Accepting a connection requires instantiating a peerconnection and a noise connection
+	// which is expensive. We therefore limit the number of in-flight connection requests. A
+	// connection is considered to be in flight from the instant it is handled until it is
+	// dequeued by a call to Accept, or errors out in some way.
+	inFlightSemaphore := make(chan struct{}, l.transport.maxInFlightConnections)
 	for {
 		select {
-		case <-inFlightQueueCh:
+		case inFlightSemaphore <- struct{}{}:
 		case <-l.ctx.Done():
 			return
 		}
@@ -128,7 +126,7 @@ func (l *listener) listen() {
 		}
 
 		go func() {
-			defer func() { inFlightQueueCh <- struct{}{} }() // free this spot once again
+			defer func() { <-inFlightSemaphore }()
 
 			ctx, cancel := context.WithTimeout(l.ctx, candidateSetupTimeout)
 			defer cancel()
@@ -145,7 +143,7 @@ func (l *listener) listen() {
 				log.Warn("could not push connection: ctx done")
 				conn.Close()
 			case l.acceptQueue <- conn:
-				// acceptQueue is an unbuffered channel, so this block until the connection is accepted.
+				// acceptQueue is an unbuffered channel, so this blocks until the connection is accepted.
 			}
 		}()
 	}
@@ -307,7 +305,18 @@ func (l *listener) Close() error {
 	select {
 	case <-l.ctx.Done():
 	default:
-		l.cancel()
+	}
+	l.cancel()
+	l.mux.Close()
+	l.wg.Wait()
+loop:
+	for {
+		select {
+		case conn := <-l.acceptQueue:
+			conn.Close()
+		default:
+			break loop
+		}
 	}
 	return nil
 }
