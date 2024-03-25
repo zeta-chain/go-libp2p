@@ -129,11 +129,10 @@ func (s *stream) cancelWrite() error {
 		return nil
 	}
 	s.sendState = sendStateReset
+	// Remove reference to this stream from data channel
+	s.dataChannel.OnBufferedAmountLow(nil)
 	s.notifyWriteStateChanged()
-	if err := s.writer.WriteMsg(&pb.Message{Flag: pb.Message_RESET.Enum()}); err != nil {
-		return err
-	}
-	return nil
+	return s.writer.WriteMsg(&pb.Message{Flag: pb.Message_RESET.Enum()})
 }
 
 func (s *stream) CloseWrite() error {
@@ -144,11 +143,10 @@ func (s *stream) CloseWrite() error {
 		return nil
 	}
 	s.sendState = sendStateDataSent
+	// Remove reference to this stream from data channel
+	s.dataChannel.OnBufferedAmountLow(nil)
 	s.notifyWriteStateChanged()
-	if err := s.writer.WriteMsg(&pb.Message{Flag: pb.Message_FIN.Enum()}); err != nil {
-		return err
-	}
-	return nil
+	return s.writer.WriteMsg(&pb.Message{Flag: pb.Message_FIN.Enum()})
 }
 
 func (s *stream) notifyWriteStateChanged() {

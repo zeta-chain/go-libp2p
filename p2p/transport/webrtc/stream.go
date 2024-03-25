@@ -90,8 +90,8 @@ type stream struct {
 	// SetReadDeadline
 	// See: https://github.com/pion/sctp/pull/290
 	controlMessageReaderEndTime time.Time
-	controlMessageReaderDone    sync.WaitGroup
 
+	onDoneOnce          sync.Once
 	onDone              func()
 	id                  uint16 // for logging purposes
 	dataChannel         *datachannel.DataChannel
@@ -113,8 +113,6 @@ func newStream(
 		dataChannel:       rwc.(*datachannel.DataChannel),
 		onDone:            onDone,
 	}
-	// released when the controlMessageReader goroutine exits
-	s.controlMessageReaderDone.Add(1)
 	s.dataChannel.SetBufferedAmountLowThreshold(sendBufferLowThreshold)
 	s.dataChannel.OnBufferedAmountLow(func() {
 		s.notifyWriteStateChanged()
@@ -130,7 +128,7 @@ func (s *stream) Close() error {
 	if isClosed {
 		return nil
 	}
-
+	defer s.cleanup()
 	closeWriteErr := s.CloseWrite()
 	closeReadErr := s.CloseRead()
 	if closeWriteErr != nil || closeReadErr != nil {
@@ -142,10 +140,6 @@ func (s *stream) Close() error {
 	if s.controlMessageReaderEndTime.IsZero() {
 		s.controlMessageReaderEndTime = time.Now().Add(maxFINACKWait)
 		s.setDataChannelReadDeadline(time.Now().Add(-1 * time.Hour))
-		go func() {
-			s.controlMessageReaderDone.Wait()
-			s.cleanup()
-		}()
 	}
 	s.mx.Unlock()
 	return nil
@@ -222,17 +216,10 @@ func (s *stream) spawnControlMessageReader() {
 	s.controlMessageReaderOnce.Do(func() {
 		// Spawn a goroutine to ensure that we're not holding any locks
 		go func() {
-			defer s.controlMessageReaderDone.Done()
 			// cleanup the sctp deadline timer goroutine
 			defer s.setDataChannelReadDeadline(time.Time{})
 
-			setDeadline := func() bool {
-				if s.controlMessageReaderEndTime.IsZero() || time.Now().Before(s.controlMessageReaderEndTime) {
-					s.setDataChannelReadDeadline(s.controlMessageReaderEndTime)
-					return true
-				}
-				return false
-			}
+			defer s.dataChannel.Close()
 
 			// Unblock any Read call waiting on reader.ReadMsg
 			s.setDataChannelReadDeadline(time.Now().Add(-1 * time.Hour))
@@ -251,12 +238,22 @@ func (s *stream) spawnControlMessageReader() {
 				s.processIncomingFlag(s.nextMessage.Flag)
 				s.nextMessage = nil
 			}
-			for s.closeForShutdownErr == nil &&
-				s.sendState != sendStateDataReceived && s.sendState != sendStateReset {
-				var msg pb.Message
-				if !setDeadline() {
+			var msg pb.Message
+			for {
+				// Connection closed. No need to cleanup the data channel.
+				if s.closeForShutdownErr != nil {
 					return
 				}
+				// Write half of the stream completed.
+				if s.sendState == sendStateDataReceived || s.sendState == sendStateReset {
+					return
+				}
+				// FIN_ACK wait deadling exceeded.
+				if !s.controlMessageReaderEndTime.IsZero() && time.Now().After(s.controlMessageReaderEndTime) {
+					return
+				}
+
+				s.setDataChannelReadDeadline(s.controlMessageReaderEndTime)
 				s.mx.Unlock()
 				err := s.reader.ReadMsg(&msg)
 				s.mx.Lock()
@@ -276,12 +273,9 @@ func (s *stream) spawnControlMessageReader() {
 }
 
 func (s *stream) cleanup() {
-	// Even if we close the datachannel pion keeps a reference to the datachannel around.
-	// Remove the onBufferedAmountLow callback to ensure that we at least garbage collect
-	// memory we allocated for this stream.
-	s.dataChannel.OnBufferedAmountLow(nil)
-	s.dataChannel.Close()
-	if s.onDone != nil {
-		s.onDone()
-	}
+	s.onDoneOnce.Do(func() {
+		if s.onDone != nil {
+			s.onDone()
+		}
+	})
 }
