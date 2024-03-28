@@ -24,7 +24,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/autonat"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
-	blankhost "github.com/libp2p/go-libp2p/p2p/host/blank"
 	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
@@ -466,8 +465,7 @@ func (cfg *Config) addAutoNAT(h *bhost.BasicHost) error {
 		}
 
 		// Pull out the pieces of the config that we _actually_ care about.
-		// Specifically, don't set up things like autorelay, listeners,
-		// identify, etc.
+		// Specifically, don't set up things like listeners, identify, etc.
 		autoNatCfg := Config{
 			Transports:         cfg.Transports,
 			Muxers:             cfg.Muxers,
@@ -486,30 +484,39 @@ func (cfg *Config) addAutoNAT(h *bhost.BasicHost) error {
 			},
 		}
 
-		dialer, err := autoNatCfg.makeSwarm(eventbus.NewBus(), false)
-		if err != nil {
-			return err
-		}
-		dialerHost := blankhost.NewBlankHost(dialer)
 		fxopts, err := autoNatCfg.addTransports()
 		if err != nil {
-			dialerHost.Close()
 			return err
 		}
+		var dialer *swarm.Swarm
+
 		fxopts = append(fxopts,
-			fx.Supply(dialerHost.ID()),
-			fx.Supply(dialer),
+			fx.Provide(eventbus.NewBus),
+			fx.Provide(func(lifecycle fx.Lifecycle, b event.Bus) (*swarm.Swarm, error) {
+				lifecycle.Append(fx.Hook{
+					OnStop: func(context.Context) error {
+						return ps.Close()
+					}})
+				var err error
+				dialer, err = autoNatCfg.makeSwarm(b, false)
+				return dialer, err
+
+			}),
 			fx.Provide(func() crypto.PrivKey { return autonatPrivKey }),
 		)
 		app := fx.New(fxopts...)
 		if err := app.Err(); err != nil {
-			dialerHost.Close()
 			return err
 		}
-		// NOTE: We're dropping the blank host here but that's fine. It
-		// doesn't really _do_ anything and doesn't even need to be
-		// closed (as long as we close the underlying network).
-		autonatOpts = append(autonatOpts, autonat.EnableService(dialerHost.Network()))
+		err = app.Start(context.Background())
+		if err != nil {
+			return err
+		}
+		go func() {
+			<-dialer.Done() // The swarm used for autonat has closed, we can cleanup now
+			app.Stop(context.Background())
+		}()
+		autonatOpts = append(autonatOpts, autonat.EnableService(dialer))
 	}
 	if cfg.AutoNATConfig.ForceReachability != nil {
 		autonatOpts = append(autonatOpts, autonat.WithReachability(*cfg.AutoNATConfig.ForceReachability))

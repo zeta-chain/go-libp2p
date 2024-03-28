@@ -263,6 +263,11 @@ func (s *Swarm) Close() error {
 	return nil
 }
 
+// Done returns a channel that is closed when the swarm is closed.
+func (s *Swarm) Done() <-chan struct{} {
+	return s.ctx.Done()
+}
+
 func (s *Swarm) close() {
 	s.ctxCancel()
 

@@ -370,6 +370,12 @@ func TestRoutedHost(t *testing.T) {
 	require.Equal(t, []peer.ID{id}, mockRouter.queried)
 }
 
+func TestAutoNATService(t *testing.T) {
+	h, err := New(EnableNATService())
+	require.NoError(t, err)
+	h.Close()
+}
+
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(
 		m,
