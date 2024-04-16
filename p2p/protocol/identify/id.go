@@ -400,8 +400,6 @@ func (ids *idService) IdentifyWait(c network.Conn) <-chan struct{} {
 			ids.emitters.evtPeerIdentificationFailed.Emit(event.EvtPeerIdentificationFailed{Peer: c.RemotePeer(), Reason: err})
 			return
 		}
-
-		ids.emitters.evtPeerIdentificationCompleted.Emit(event.EvtPeerIdentificationCompleted{Peer: c.RemotePeer()})
 	}()
 
 	return e.IdentifyWaitChan
@@ -711,8 +709,16 @@ func (ids *idService) consumeMessage(mes *pb.Identify, c network.Conn, isPush bo
 		})
 	}
 
-	// mes.ObservedAddr
-	ids.consumeObservedAddress(mes.GetObservedAddr(), c)
+	obsAddr, err := ma.NewMultiaddrBytes(mes.GetObservedAddr())
+	if err != nil {
+		log.Debugf("error parsing received observed addr for %s: %s", c, err)
+		obsAddr = nil
+	}
+
+	if obsAddr != nil {
+		// TODO refactor this to use the emitted events instead of having this func call explicitly.
+		ids.observedAddrs.Record(c, obsAddr)
+	}
 
 	// mes.ListenAddrs
 	laddrs := mes.GetListenAddrs()
@@ -763,6 +769,7 @@ func (ids *idService) consumeMessage(mes *pb.Identify, c network.Conn, isPush bo
 		signedAddrs, err := ids.consumeSignedPeerRecord(c.RemotePeer(), signedPeerRecord)
 		if err != nil {
 			log.Debugf("failed to consume signed peer record: %s", err)
+			signedPeerRecord = nil
 		} else {
 			addrs = signedAddrs
 		}
@@ -786,6 +793,18 @@ func (ids *idService) consumeMessage(mes *pb.Identify, c network.Conn, isPush bo
 
 	// get the key from the other side. we may not have it (no-auth transport)
 	ids.consumeReceivedPubKey(c, mes.PublicKey)
+
+	ids.emitters.evtPeerIdentificationCompleted.Emit(event.EvtPeerIdentificationCompleted{
+		Peer:             c.RemotePeer(),
+		Conn:             c,
+		ListenAddrs:      lmaddrs,
+		Protocols:        mesProtocols,
+		SignedPeerRecord: signedPeerRecord,
+		ObservedAddr:     obsAddr,
+		ProtocolVersion:  pv,
+		AgentVersion:     av,
+	})
+
 }
 
 func (ids *idService) consumeSignedPeerRecord(p peer.ID, signedPeerRecord *record.Envelope) ([]ma.Multiaddr, error) {
@@ -917,20 +936,6 @@ func HasConsistentTransport(a ma.Multiaddr, green []ma.Multiaddr) bool {
 	}
 
 	return false
-}
-
-func (ids *idService) consumeObservedAddress(observed []byte, c network.Conn) {
-	if observed == nil {
-		return
-	}
-
-	maddr, err := ma.NewMultiaddrBytes(observed)
-	if err != nil {
-		log.Debugf("error parsing received observed addr for %s: %s", c, err)
-		return
-	}
-
-	ids.observedAddrs.Record(c, maddr)
 }
 
 // addConnWithLock assuems caller holds the connsMu lock
