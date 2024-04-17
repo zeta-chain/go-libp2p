@@ -305,7 +305,7 @@ func (h *Host) Serve() error {
 		h.httpTransport.listenAddrs = append(h.httpTransport.listenAddrs, h.StreamHost.Addrs()...)
 
 		go func() {
-			errCh <- http.Serve(listener, h.ServeMux)
+			errCh <- http.Serve(listener, connectionCloseHeaderMiddleware(h.ServeMux))
 		}()
 	}
 
@@ -422,6 +422,9 @@ func (rt *streamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error)
 	if err != nil {
 		return nil, err
 	}
+
+	// Write connection: close header to ensure the stream is closed after the response
+	r.Header.Add("connection", "close")
 
 	go func() {
 		defer s.CloseWrite()
@@ -816,4 +819,12 @@ func (h *Host) RemovePeerMetadata(server peer.ID) {
 		return
 	}
 	h.peerMetadata.Remove(server)
+}
+
+func connectionCloseHeaderMiddleware(next http.Handler) http.Handler {
+	// Sets connection: close. It's preferable to not reuse streams for HTTP.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Connection", "close")
+		next.ServeHTTP(w, r)
+	})
 }
