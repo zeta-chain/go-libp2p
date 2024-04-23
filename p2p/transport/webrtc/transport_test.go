@@ -40,6 +40,58 @@ func getTransport(t *testing.T, opts ...Option) (*WebRTCTransport, peer.ID) {
 	return transport, peerID
 }
 
+func TestIsWebRTCDirectMultiaddr(t *testing.T) {
+	invalid := []string{
+		"/ip4/1.2.3.4/tcp/10/",
+		"/ip6/1::3/udp/100/quic-v1/",
+		"/ip4/1.2.3.4/udp/1/quic-v1/webrtc-direct",
+	}
+
+	valid := []struct {
+		addr  string
+		count int
+	}{
+		{
+			addr:  "/ip4/1.2.3.4/udp/1234/webrtc-direct",
+			count: 0,
+		},
+		{
+			addr:  "/dns/test.test/udp/1234/webrtc-direct",
+			count: 0,
+		},
+		{
+			addr:  "/ip4/1.2.3.4/udp/1234/webrtc-direct/certhash/uEiAsGPzpiPGQzSlVHRXrUCT5EkTV7YFrV4VZ3hpEKTd_zg",
+			count: 1,
+		},
+		{
+			addr:  "/ip6/0:0:0:0:0:0:0:1/udp/1234/webrtc-direct/certhash/uEiAsGPzpiPGQzSlVHRXrUCT5EkTV7YFrV4VZ3hpEKTd_zg",
+			count: 1,
+		},
+		{
+			addr:  "/dns/test.test/udp/1234/webrtc-direct/certhash/uEiAsGPzpiPGQzSlVHRXrUCT5EkTV7YFrV4VZ3hpEKTd_zg",
+			count: 1,
+		},
+		{
+			addr:  "/dns/test.test/udp/1234/webrtc-direct/certhash/uEiAsGPzpiPGQzSlVHRXrUCT5EkTV7YFrV4VZ3hpEKTd_zg/certhash/uEiAsGPzpiPGQzSlVHRXrUCT5EkTV7ZGrV4VZ3hpEKTd_zg",
+			count: 2,
+		},
+	}
+
+	for _, addr := range invalid {
+		a := ma.StringCast(addr)
+		isValid, n := IsWebRTCDirectMultiaddr(a)
+		require.Equal(t, 0, n)
+		require.False(t, isValid)
+	}
+
+	for _, tc := range valid {
+		a := ma.StringCast(tc.addr)
+		isValid, n := IsWebRTCDirectMultiaddr(a)
+		require.Equal(t, tc.count, n)
+		require.True(t, isValid)
+	}
+}
+
 func TestTransportWebRTC_CanDial(t *testing.T) {
 	tr, _ := getTransport(t)
 	invalid := []string{
@@ -62,6 +114,21 @@ func TestTransportWebRTC_CanDial(t *testing.T) {
 	for _, addr := range valid {
 		a := ma.StringCast(addr)
 		require.True(t, tr.CanDial(a), addr)
+	}
+}
+
+func TestTransportAddCertHasher(t *testing.T) {
+	tr, _ := getTransport(t)
+	addrs := []string{
+		"/ip4/1.2.3.4/udp/1/webrtc-direct",
+		"/ip6/1::3/udp/2/webrtc-direct",
+	}
+	for _, a := range addrs {
+		addr, added := tr.AddCertHashes(ma.StringCast(a))
+		require.True(t, added)
+		_, err := addr.ValueForProtocol(ma.P_CERTHASH)
+		require.NoError(t, err)
+		require.True(t, strings.HasPrefix(addr.String(), a))
 	}
 }
 
