@@ -811,7 +811,11 @@ func (h *BasicHost) Addrs() []ma.Multiaddr {
 // NormalizeMultiaddr returns a multiaddr suitable for equality checks.
 // If the multiaddr is a webtransport component, it removes the certhashes.
 func (h *BasicHost) NormalizeMultiaddr(addr ma.Multiaddr) ma.Multiaddr {
-	if ok, n := libp2pwebtransport.IsWebtransportMultiaddr(addr); ok && n > 0 {
+	ok, n := libp2pwebtransport.IsWebtransportMultiaddr(addr)
+	if !ok {
+		ok, n = libp2pwebrtc.IsWebRTCDirectMultiaddr(addr)
+	}
+	if ok && n > 0 {
 		out := addr
 		for i := 0; i < n; i++ {
 			out, _ = ma.SplitLast(out)
