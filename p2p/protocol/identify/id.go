@@ -408,7 +408,7 @@ func (ids *idService) IdentifyWait(c network.Conn) <-chan struct{} {
 func (ids *idService) identifyConn(c network.Conn) error {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	s, err := c.NewStream(network.WithUseTransient(ctx, "identify"))
+	s, err := c.NewStream(network.WithAllowLimitedConn(ctx, "identify"))
 	if err != nil {
 		log.Debugw("error opening identify stream", "peer", c.RemotePeer(), "error", err)
 		return err
@@ -752,7 +752,8 @@ func (ids *idService) consumeMessage(mes *pb.Identify, c network.Conn, isPush bo
 	// Taking the lock ensures that we don't concurrently process a disconnect.
 	ids.addrMu.Lock()
 	ttl := peerstore.RecentlyConnectedAddrTTL
-	if ids.Host.Network().Connectedness(p) == network.Connected {
+	switch ids.Host.Network().Connectedness(p) {
+	case network.Limited, network.Connected:
 		ttl = peerstore.ConnectedAddrTTL
 	}
 
@@ -980,13 +981,15 @@ func (nn *netNotifiee) Disconnected(_ network.Network, c network.Conn) {
 	delete(ids.conns, c)
 	ids.connsMu.Unlock()
 
-	if ids.Host.Network().Connectedness(c.RemotePeer()) != network.Connected {
-		// Last disconnect.
-		// Undo the setting of addresses to peer.ConnectedAddrTTL we did
-		ids.addrMu.Lock()
-		defer ids.addrMu.Unlock()
-		ids.Host.Peerstore().UpdateAddrs(c.RemotePeer(), peerstore.ConnectedAddrTTL, peerstore.RecentlyConnectedAddrTTL)
+	switch ids.Host.Network().Connectedness(c.RemotePeer()) {
+	case network.Connected, network.Limited:
+		return
 	}
+	// Last disconnect.
+	// Undo the setting of addresses to peer.ConnectedAddrTTL we did
+	ids.addrMu.Lock()
+	defer ids.addrMu.Unlock()
+	ids.Host.Peerstore().UpdateAddrs(c.RemotePeer(), peerstore.ConnectedAddrTTL, peerstore.RecentlyConnectedAddrTTL)
 }
 
 func (nn *netNotifiee) Listen(n network.Network, a ma.Multiaddr)      {}

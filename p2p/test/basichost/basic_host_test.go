@@ -77,7 +77,7 @@ func TestNoStreamOverTransientConnection(t *testing.T) {
 
 	require.Error(t, err)
 
-	_, err = h1.NewStream(network.WithUseTransient(context.Background(), "test"), h2.ID(), "/testprotocol")
+	_, err = h1.NewStream(network.WithAllowLimitedConn(context.Background(), "test"), h2.ID(), "/testprotocol")
 	require.NoError(t, err)
 }
 
