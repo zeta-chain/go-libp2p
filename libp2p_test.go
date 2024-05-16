@@ -376,6 +376,12 @@ func TestAutoNATService(t *testing.T) {
 	h.Close()
 }
 
+func TestDisableIdentifyAddressDiscovery(t *testing.T) {
+	h, err := New(DisableIdentifyAddressDiscovery())
+	require.NoError(t, err)
+	h.Close()
+}
+
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(
 		m,

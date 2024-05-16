@@ -129,6 +129,8 @@ type Config struct {
 	DialRanker network.DialRanker
 
 	SwarmOpts []swarm.Option
+
+	DisableIdentifyAddressDiscovery bool
 }
 
 func (cfg *Config) makeSwarm(eventBus event.Bus, enableMetrics bool) (*swarm.Swarm, error) {
@@ -290,19 +292,20 @@ func (cfg *Config) addTransports() ([]fx.Option, error) {
 
 func (cfg *Config) newBasicHost(swrm *swarm.Swarm, eventBus event.Bus) (*bhost.BasicHost, error) {
 	h, err := bhost.NewHost(swrm, &bhost.HostOpts{
-		EventBus:             eventBus,
-		ConnManager:          cfg.ConnManager,
-		AddrsFactory:         cfg.AddrsFactory,
-		NATManager:           cfg.NATManager,
-		EnablePing:           !cfg.DisablePing,
-		UserAgent:            cfg.UserAgent,
-		ProtocolVersion:      cfg.ProtocolVersion,
-		EnableHolePunching:   cfg.EnableHolePunching,
-		HolePunchingOptions:  cfg.HolePunchingOptions,
-		EnableRelayService:   cfg.EnableRelayService,
-		RelayServiceOpts:     cfg.RelayServiceOpts,
-		EnableMetrics:        !cfg.DisableMetrics,
-		PrometheusRegisterer: cfg.PrometheusRegisterer,
+		EventBus:                        eventBus,
+		ConnManager:                     cfg.ConnManager,
+		AddrsFactory:                    cfg.AddrsFactory,
+		NATManager:                      cfg.NATManager,
+		EnablePing:                      !cfg.DisablePing,
+		UserAgent:                       cfg.UserAgent,
+		ProtocolVersion:                 cfg.ProtocolVersion,
+		EnableHolePunching:              cfg.EnableHolePunching,
+		HolePunchingOptions:             cfg.HolePunchingOptions,
+		EnableRelayService:              cfg.EnableRelayService,
+		RelayServiceOpts:                cfg.RelayServiceOpts,
+		EnableMetrics:                   !cfg.DisableMetrics,
+		PrometheusRegisterer:            cfg.PrometheusRegisterer,
+		DisableIdentifyAddressDiscovery: cfg.DisableIdentifyAddressDiscovery,
 	})
 	if err != nil {
 		return nil, err
