@@ -434,9 +434,13 @@ func (rt *streamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error)
 		}
 	}()
 
-	// TODO: Adhere to the request.Context
+	if deadline, ok := r.Context().Deadline(); ok {
+		s.SetReadDeadline(deadline)
+	}
+
 	resp, err := http.ReadResponse(bufio.NewReader(s), r)
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 	resp.Body = &streamReadCloser{resp.Body, s}
