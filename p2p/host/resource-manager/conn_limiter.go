@@ -85,7 +85,6 @@ func (cl *connLimiter) addConn(ip netip.Addr) bool {
 			return false
 		}
 		masked := prefix.String()
-
 		counts, ok := countsPerLimit[i][masked]
 		if !ok {
 			if countsPerLimit[i] == nil {

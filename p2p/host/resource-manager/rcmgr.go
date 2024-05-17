@@ -677,10 +677,15 @@ func (s *connectionScope) PeerScope() network.PeerScope {
 }
 
 func (s *connectionScope) Done() {
+	s.Lock()
+	defer s.Unlock()
+	if s.done {
+		return
+	}
 	if s.ip.IsValid() {
 		s.rcmgr.connLimiter.rmConn(s.ip)
 	}
-	s.resourceScope.Done()
+	s.resourceScope.doneUnlocked()
 }
 
 // transferAllowedToStandard transfers this connection scope from being part of
