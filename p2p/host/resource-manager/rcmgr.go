@@ -316,9 +316,7 @@ func (r *resourceManager) nextStreamId() int64 {
 	return r.streamId
 }
 
-// OpenConnectionNoIP is like OpenConnection, but does not use IP information.
-// Used when we still want to limit the connection by other scopes, but don't
-// have IP information like when we are relaying.
+// OpenConnectionNoIP is deprecated and will be removed in the next release
 func (r *resourceManager) OpenConnectionNoIP(dir network.Direction, usefd bool, endpoint multiaddr.Multiaddr) (network.ConnManagementScope, error) {
 	return r.openConnection(dir, usefd, endpoint, netip.Addr{})
 }
@@ -326,7 +324,8 @@ func (r *resourceManager) OpenConnectionNoIP(dir network.Direction, usefd bool, 
 func (r *resourceManager) OpenConnection(dir network.Direction, usefd bool, endpoint multiaddr.Multiaddr) (network.ConnManagementScope, error) {
 	ip, err := manet.ToIP(endpoint)
 	if err != nil {
-		return nil, err
+		// No IP address
+		return r.openConnection(dir, usefd, endpoint, netip.Addr{})
 	}
 
 	ipAddr, ok := netip.AddrFromSlice(ip)
