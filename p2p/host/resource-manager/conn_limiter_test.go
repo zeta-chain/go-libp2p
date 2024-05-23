@@ -2,7 +2,6 @@ package rcmgr
 
 import (
 	"encoding/binary"
-	"fmt"
 	"net"
 	"net/netip"
 	"testing"
@@ -15,7 +14,7 @@ func TestItLimits(t *testing.T) {
 		ip, err := netip.ParseAddr("1.2.3.4")
 		require.NoError(t, err)
 		cl := newConnLimiter()
-		cl.connLimitPerCIDRIP4[0].ConnCount = 1
+		cl.connLimitPerSubnetV4[0].ConnCount = 1
 		require.True(t, cl.addConn(ip))
 
 		// should fail the second time
@@ -29,10 +28,10 @@ func TestItLimits(t *testing.T) {
 		ip, err := netip.ParseAddr("1:2:3:4::1")
 		require.NoError(t, err)
 		cl := newConnLimiter()
-		original := cl.connLimitPerCIDRIP6[0].ConnCount
-		cl.connLimitPerCIDRIP6[0].ConnCount = 1
+		original := cl.connLimitPerSubnetV6[0].ConnCount
+		cl.connLimitPerSubnetV6[0].ConnCount = 1
 		defer func() {
-			cl.connLimitPerCIDRIP6[0].ConnCount = original
+			cl.connLimitPerSubnetV6[0].ConnCount = original
 		}()
 		require.True(t, cl.addConn(ip))
 
@@ -67,7 +66,6 @@ func TestItLimits(t *testing.T) {
 		for i := 0; i < defaultMaxConcurrentConns*8; i++ {
 			ip := net.ParseIP("ffef:2:3:4::1")
 			binary.BigEndian.PutUint16(ip[5:7], uint16(i))
-			fmt.Println(ip.String())
 			ipAddr := netip.MustParseAddr(ip.String())
 			require.True(t, cl.addConn(ipAddr))
 		}
@@ -76,6 +74,26 @@ func TestItLimits(t *testing.T) {
 		binary.BigEndian.PutUint16(ip[5:7], uint16(defaultMaxConcurrentConns*8+1))
 		ipAddr := netip.MustParseAddr(ip.String())
 		require.False(t, cl.addConn(ipAddr))
+	})
+
+	t.Run("IPv4 with localhost", func(t *testing.T) {
+		cl := &connLimiter{
+			networkPrefixLimitV4: DefaultNetworkPrefixLimitV4,
+			connLimitPerSubnetV4: []ConnLimitPerSubnet{
+				{PrefixLength: 0, ConnCount: 1}, // 1 connection for the whole IPv4 space
+			},
+		}
+
+		ip := netip.MustParseAddr("1.2.3.4")
+		require.True(t, cl.addConn(ip))
+
+		ip = netip.MustParseAddr("4.3.2.1")
+		// should fail the second time, we only allow 1 connection for the whole IPv4 space
+		require.False(t, cl.addConn(ip))
+
+		ip = netip.MustParseAddr("127.0.0.1")
+		// Succeeds because we defined an explicit limit for the loopback subnet
+		require.True(t, cl.addConn(ip))
 	})
 }
 
@@ -131,6 +149,12 @@ func FuzzConnLimiter(f *testing.F) {
 				addedCount += count
 			}
 		}
+		for _, count := range cl.connsPerNetworkPrefixV4 {
+			addedCount += count
+		}
+		for _, count := range cl.connsPerNetworkPrefixV6 {
+			addedCount += count
+		}
 		if addedCount == 0 && len(addedConns) > 0 {
 			t.Fatalf("added count: %d", addedCount)
 		}
@@ -150,9 +174,41 @@ func FuzzConnLimiter(f *testing.F) {
 				leftoverCount += count
 			}
 		}
+		for _, count := range cl.connsPerNetworkPrefixV4 {
+			addedCount += count
+		}
+		for _, count := range cl.connsPerNetworkPrefixV6 {
+			addedCount += count
+		}
 		if leftoverCount != 0 {
 			t.Fatalf("leftover count: %d", leftoverCount)
 		}
 	})
+}
 
+func TestSortedNetworkPrefixLimits(t *testing.T) {
+	npLimits := []NetworkPrefixLimit{
+		{
+			Network: netip.MustParsePrefix("1.2.0.0/16"),
+		},
+		{
+			Network: netip.MustParsePrefix("1.2.3.0/28"),
+		},
+		{
+			Network: netip.MustParsePrefix("1.2.3.4/32"),
+		},
+	}
+	npLimits = sortNetworkPrefixes(npLimits)
+	sorted := []NetworkPrefixLimit{
+		{
+			Network: netip.MustParsePrefix("1.2.3.4/32"),
+		},
+		{
+			Network: netip.MustParsePrefix("1.2.3.0/28"),
+		},
+		{
+			Network: netip.MustParsePrefix("1.2.0.0/16"),
+		},
+	}
+	require.EqualValues(t, sorted, npLimits)
 }
