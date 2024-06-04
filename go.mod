@@ -55,7 +55,7 @@ require (
 	github.com/quic-go/webtransport-go v0.8.0
 	github.com/raulk/go-watchdog v1.3.0
 	github.com/stretchr/testify v1.9.0
-	go.uber.org/fx v1.21.1
+	go.uber.org/fx v1.22.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.4.0
 	golang.org/x/crypto v0.23.0
@@ -126,9 +126,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
-
-// Remove this once fx releases the next version.
-// We want to ship with a fix around SIGINT handling:
-// https://github.com/uber-go/fx/pull/1198.
-// Context: https://github.com/libp2p/go-libp2p/issues/2785
-replace go.uber.org/fx v1.21.1 => github.com/uber-go/fx v1.21.2-0.20240515133256-cb9cccf55845
