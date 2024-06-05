@@ -755,3 +755,65 @@ func TestResponseWriterShouldNotHaveCancelledContext(t *testing.T) {
 
 	require.False(t, <-closeNotifyCh)
 }
+
+func TestHTTPHostAsRoundTripper(t *testing.T) {
+	serverHost, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/udp/0/quic-v1"),
+	)
+	require.NoError(t, err)
+
+	serverHttpHost := libp2phttp.Host{
+		InsecureAllowHTTP: true,
+		StreamHost:        serverHost,
+		ListenAddrs:       []ma.Multiaddr{ma.StringCast("/ip4/127.0.0.1/tcp/0/http")},
+	}
+
+	serverHttpHost.SetHTTPHandlerAtPath("/hello", "/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("hello"))
+	}))
+
+	go serverHttpHost.Serve()
+	defer serverHttpHost.Close()
+
+	testCases := []string{
+		// Version that has an http-path. Will uncomment when we get the changes in go-multiaddr in
+		// "multiaddr:" + serverHost.Addrs()[0].String() + "/http-path/hello",
+	}
+	for _, a := range serverHttpHost.Addrs() {
+		if _, err := a.ValueForProtocol(ma.P_HTTP); err == nil {
+			testCases = append(testCases, "multiaddr:"+a.String())
+			serverPort, err := a.ValueForProtocol(ma.P_TCP)
+			require.NoError(t, err)
+			testCases = append(testCases, "http://127.0.0.1:"+serverPort)
+		} else {
+			testCases = append(testCases, "multiaddr:"+a.String()+"/p2p/"+serverHost.ID().String())
+		}
+	}
+
+	clientStreamHost, err := libp2p.New()
+	require.NoError(t, err)
+	defer clientStreamHost.Close()
+
+	clientHttpHost := libp2phttp.Host{StreamHost: clientStreamHost}
+	client := http.Client{Transport: &clientHttpHost}
+	for _, tc := range testCases {
+		t.Run(tc, func(t *testing.T) {
+			resp, err := client.Get(tc)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.Equal(t, "hello", string(body))
+		})
+	}
+}
+
+func TestHTTPHostAsRoundTripperFailsWhenNoStreamHostPresent(t *testing.T) {
+	clientHttpHost := libp2phttp.Host{}
+	client := http.Client{Transport: &clientHttpHost}
+
+	_, err := client.Get("multiaddr:/ip4/127.0.0.1/udp/1111/quic-v1")
+	// Fails because we don't have a stream host available to make the request
+	require.Error(t, err)
+	require.ErrorContains(t, err, "Missing StreamHost")
+}

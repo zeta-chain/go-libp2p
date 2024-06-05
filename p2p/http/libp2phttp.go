@@ -620,6 +620,64 @@ func (h *Host) NamespacedClient(p protocol.ID, server peer.AddrInfo, opts ...Rou
 
 	return http.Client{Transport: nrt}, nil
 }
+func (h *Host) initDefaultRT() {
+	h.createDefaultClientRoundTripper.Do(func() {
+		if h.DefaultClientRoundTripper == nil {
+			h.DefaultClientRoundTripper = &http.Transport{}
+		}
+	})
+}
+
+// RoundTrip implements http.RoundTripper for the HTTP Host.
+// This allows you to use the Host as a Transport for an http.Client.
+// See the example for idomatic usage.
+func (h *Host) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.URL.Scheme == "http" || r.URL.Scheme == "https" {
+		h.initDefaultRT()
+		return h.DefaultClientRoundTripper.RoundTrip(r)
+	} else if r.URL.Scheme == "multiaddr" {
+		addr, err := ma.NewMultiaddr(r.URL.String()[len("multiaddr:"):])
+		if err != nil {
+			return nil, err
+		}
+		addr, isHTTP := normalizeHTTPMultiaddr(addr)
+		if isHTTP {
+			parsed := parseMultiaddr(addr)
+			scheme := "http"
+			if parsed.useHTTPS {
+				scheme = "https"
+			}
+			h.initDefaultRT()
+			rt := h.DefaultClientRoundTripper
+			if parsed.sni != parsed.host {
+				// We have a different host and SNI (e.g. using an IP address but specifying a SNI)
+				// We need to make our own transport to support this.
+				rt = rt.Clone()
+				rt.TLSClientConfig.ServerName = parsed.sni
+				defer rt.CloseIdleConnections()
+			}
+
+			r.URL.Scheme = scheme
+			r.URL.Host = parsed.host + ":" + parsed.port
+			return rt.RoundTrip(r)
+		}
+
+		if h.StreamHost == nil {
+			return nil, fmt.Errorf("can not do HTTP over streams. Missing StreamHost")
+		}
+
+		addr, pid := peer.SplitAddr(addr)
+		srt := streamRoundTripper{
+			server:      pid,
+			serverAddrs: []ma.Multiaddr{addr},
+			httpHost:    h,
+			h:           h.StreamHost,
+		}
+		return srt.RoundTrip(r)
+	}
+
+	return nil, fmt.Errorf("unsupported scheme %s", r.URL.Scheme)
+}
 
 // NewConstrainedRoundTripper returns an http.RoundTripper that can fulfill and HTTP
 // request to the given server. It may use an HTTP transport or a stream based
@@ -672,11 +730,7 @@ func (h *Host) NewConstrainedRoundTripper(server peer.AddrInfo, opts ...RoundTri
 			scheme = "https"
 		}
 
-		h.createDefaultClientRoundTripper.Do(func() {
-			if h.DefaultClientRoundTripper == nil {
-				h.DefaultClientRoundTripper = &http.Transport{}
-			}
-		})
+		h.initDefaultRT()
 		rt := h.DefaultClientRoundTripper
 		ownRoundtripper := false
 		if parsed.sni != parsed.host {

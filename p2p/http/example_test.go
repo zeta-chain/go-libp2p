@@ -357,3 +357,30 @@ func ExampleWellKnownHandler() {
 	// Output: {"/hello/1":{"path":"/hello-path/"}}
 
 }
+
+func ExampleHost_RoundTrip() {
+	// Setup server for example
+	server := libp2phttp.Host{
+		InsecureAllowHTTP: true, // For our example, we'll allow insecure HTTP
+		ListenAddrs:       []ma.Multiaddr{ma.StringCast("/ip4/127.0.0.1/tcp/0/http")},
+	}
+	go server.Serve()
+	defer server.Close()
+	server.SetHTTPHandlerAtPath("/hello/", "/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello World"))
+	}))
+
+	// Use the HTTP Host as a RoundTripper
+	httpHost := libp2phttp.Host{}
+	client := http.Client{Transport: &httpHost}
+	resp, err := client.Get("multiaddr:" + server.Addrs()[0].String())
+	if err != nil {
+		log.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(body))
+	// Output: Hello World
+}
