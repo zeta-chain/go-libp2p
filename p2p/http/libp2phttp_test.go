@@ -719,3 +719,39 @@ func TestServerLegacyWellKnownResource(t *testing.T) {
 	}
 
 }
+
+func TestResponseWriterShouldNotHaveCancelledContext(t *testing.T) {
+	h, err := libp2p.New()
+	require.NoError(t, err)
+	defer h.Close()
+	httpHost := libp2phttp.Host{StreamHost: h}
+	go httpHost.Serve()
+	defer httpHost.Close()
+
+	closeNotifyCh := make(chan bool, 1)
+	httpHost.SetHTTPHandlerAtPath("/test", "/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Legacy code uses this to check if the connection was closed
+		//lint:ignore SA1019 This is a test to assert we do the right thing since Go HTTP stdlib depends on this.
+		ch := w.(http.CloseNotifier).CloseNotify()
+		select {
+		case <-ch:
+			closeNotifyCh <- true
+		case <-time.After(100 * time.Millisecond):
+			closeNotifyCh <- false
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	clientH, err := libp2p.New()
+	require.NoError(t, err)
+	defer clientH.Close()
+	clientHost := libp2phttp.Host{StreamHost: clientH}
+
+	rt, err := clientHost.NewConstrainedRoundTripper(peer.AddrInfo{ID: h.ID(), Addrs: h.Addrs()})
+	require.NoError(t, err)
+	httpClient := &http.Client{Transport: rt}
+	_, err = httpClient.Get("/")
+	require.NoError(t, err)
+
+	require.False(t, <-closeNotifyCh)
+}
