@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	tpt "github.com/libp2p/go-libp2p/core/transport"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/multiformats/go-multibase"
@@ -865,5 +867,120 @@ func TestGenUfrag(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		s := genUfrag()
 		require.True(t, strings.HasPrefix(s, "libp2p+webrtc+v1/"))
+	}
+}
+
+func TestManyConnections(t *testing.T) {
+	var listeners []tpt.Listener
+	var listenerPeerIDs []peer.ID
+
+	const numListeners = 5
+	const dialersPerListener = 5
+	const connsPerDialer = 10
+	errCh := make(chan error, 10*numListeners*dialersPerListener*connsPerDialer)
+	successCh := make(chan struct{}, 10*numListeners*dialersPerListener*connsPerDialer)
+
+	for i := 0; i < numListeners; i++ {
+		tr, lp := getTransport(t)
+		listenerPeerIDs = append(listenerPeerIDs, lp)
+		ln, err := tr.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/webrtc-direct"))
+		require.NoError(t, err)
+		defer ln.Close()
+		listeners = append(listeners, ln)
+	}
+
+	runListenConn := func(conn tpt.CapableConn) {
+		defer conn.Close()
+		s, err := conn.AcceptStream()
+		if err != nil {
+			t.Errorf("accept stream failed for listener: %s", err)
+			errCh <- err
+			return
+		}
+		var b [4]byte
+		if _, err := s.Read(b[:]); err != nil {
+			t.Errorf("read stream failed for listener: %s", err)
+			errCh <- err
+			return
+		}
+		s.Write(b[:])
+		_, err = s.Read(b[:]) // peer will close the connection after read
+		if !assert.Error(t, err) {
+			err = errors.New("invalid read: expected conn to close")
+			errCh <- err
+			return
+		}
+		successCh <- struct{}{}
+	}
+
+	runDialConn := func(conn tpt.CapableConn) {
+		defer conn.Close()
+
+		s, err := conn.OpenStream(context.Background())
+		if err != nil {
+			t.Errorf("accept stream failed for listener: %s", err)
+			errCh <- err
+			return
+		}
+		var b [4]byte
+		if _, err := s.Write(b[:]); err != nil {
+			t.Errorf("write stream failed for dialer: %s", err)
+			errCh <- err
+			return
+		}
+		if _, err := s.Read(b[:]); err != nil {
+			t.Errorf("read stream failed for dialer: %s", err)
+			errCh <- err
+			return
+		}
+		s.Close()
+	}
+
+	runListener := func(ln tpt.Listener) {
+		for i := 0; i < dialersPerListener*connsPerDialer; i++ {
+			conn, err := ln.Accept()
+			if err != nil {
+				t.Errorf("listener failed to accept conneciton: %s", err)
+				return
+			}
+			go runListenConn(conn)
+		}
+	}
+
+	runDialer := func(ln tpt.Listener, lp peer.ID) {
+		tp, _ := getTransport(t)
+		for i := 0; i < connsPerDialer; i++ {
+			// We want to test for deadlocks, set a high timeout
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+			conn, err := tp.Dial(ctx, ln.Multiaddr(), lp)
+			if err != nil {
+				t.Errorf("dial failed: %s", err)
+				errCh <- err
+				cancel()
+				return
+			}
+			runDialConn(conn)
+			cancel()
+		}
+	}
+
+	for i := 0; i < numListeners; i++ {
+		go runListener(listeners[i])
+	}
+	for i := 0; i < numListeners; i++ {
+		for j := 0; j < dialersPerListener; j++ {
+			go runDialer(listeners[i], listenerPeerIDs[i])
+		}
+	}
+
+	for i := 0; i < numListeners*dialersPerListener*connsPerDialer; i++ {
+		select {
+		case <-successCh:
+			t.Log("completed conn: ", i)
+		case err := <-errCh:
+			t.Fatalf("failed: %s", err)
+		case <-time.After(300 * time.Second):
+			t.Fatalf("timed out")
+		}
 	}
 }
