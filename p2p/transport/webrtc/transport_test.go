@@ -860,3 +860,10 @@ func TestMaxInFlightRequests(t *testing.T) {
 	require.Equal(t, count, int(success.Load()), "expected exactly 3 dial successes")
 	require.Equal(t, 1, int(fails.Load()), "expected exactly 1 dial failure")
 }
+
+func TestGenUfrag(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		s := genUfrag()
+		require.True(t, strings.HasPrefix(s, "libp2p+webrtc+v1/"))
+	}
+}
