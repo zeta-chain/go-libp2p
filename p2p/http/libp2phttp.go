@@ -406,11 +406,14 @@ type PeerMetadataGetter interface {
 }
 
 type streamRoundTripper struct {
-	server      peer.ID
-	addrsAdded  sync.Once
-	serverAddrs []ma.Multiaddr
-	h           host.Host
-	httpHost    *Host
+	server peer.ID
+	// if true, we won't add the server's addresses to the peerstore. This
+	// should only be set when creating the struct.
+	skipAddAddrs bool
+	addrsAdded   sync.Once
+	serverAddrs  []ma.Multiaddr
+	h            host.Host
+	httpHost     *Host
 }
 
 // streamReadCloser wraps an io.ReadCloser and closes the underlying stream when
@@ -438,12 +441,14 @@ func (rt *streamRoundTripper) GetPeerMetadata() (PeerMeta, error) {
 // RoundTrip implements http.RoundTripper.
 func (rt *streamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 	// Add the addresses we learned about for this server
-	rt.addrsAdded.Do(func() {
-		if len(rt.serverAddrs) > 0 {
-			rt.h.Peerstore().AddAddrs(rt.server, rt.serverAddrs, peerstore.TempAddrTTL)
-		}
-		rt.serverAddrs = nil // may as well cleanup
-	})
+	if !rt.skipAddAddrs {
+		rt.addrsAdded.Do(func() {
+			if len(rt.serverAddrs) > 0 {
+				rt.h.Peerstore().AddAddrs(rt.server, rt.serverAddrs, peerstore.TempAddrTTL)
+			}
+			rt.serverAddrs = nil // may as well cleanup
+		})
+	}
 
 	s, err := rt.h.NewStream(r.Context(), rt.server, ProtocolIDForMultistreamSelect)
 	if err != nil {
@@ -632,51 +637,63 @@ func (h *Host) initDefaultRT() {
 // This allows you to use the Host as a Transport for an http.Client.
 // See the example for idomatic usage.
 func (h *Host) RoundTrip(r *http.Request) (*http.Response, error) {
-	if r.URL.Scheme == "http" || r.URL.Scheme == "https" {
+	switch r.URL.Scheme {
+	case "http", "https":
 		h.initDefaultRT()
 		return h.DefaultClientRoundTripper.RoundTrip(r)
-	} else if r.URL.Scheme == "multiaddr" {
-		addr, err := ma.NewMultiaddr(r.URL.String()[len("multiaddr:"):])
-		if err != nil {
-			return nil, err
-		}
-		addr, isHTTP := normalizeHTTPMultiaddr(addr)
-		if isHTTP {
-			parsed := parseMultiaddr(addr)
-			scheme := "http"
-			if parsed.useHTTPS {
-				scheme = "https"
-			}
-			h.initDefaultRT()
-			rt := h.DefaultClientRoundTripper
-			if parsed.sni != parsed.host {
-				// We have a different host and SNI (e.g. using an IP address but specifying a SNI)
-				// We need to make our own transport to support this.
-				rt = rt.Clone()
-				rt.TLSClientConfig.ServerName = parsed.sni
-				defer rt.CloseIdleConnections()
-			}
-
-			r.URL.Scheme = scheme
-			r.URL.Host = parsed.host + ":" + parsed.port
-			return rt.RoundTrip(r)
-		}
-
-		if h.StreamHost == nil {
-			return nil, fmt.Errorf("can not do HTTP over streams. Missing StreamHost")
-		}
-
-		addr, pid := peer.SplitAddr(addr)
-		srt := streamRoundTripper{
-			server:      pid,
-			serverAddrs: []ma.Multiaddr{addr},
-			httpHost:    h,
-			h:           h.StreamHost,
-		}
-		return srt.RoundTrip(r)
+	case "multiaddr":
+		break
+	default:
+		return nil, fmt.Errorf("unsupported scheme %s", r.URL.Scheme)
 	}
 
-	return nil, fmt.Errorf("unsupported scheme %s", r.URL.Scheme)
+	addr, err := ma.NewMultiaddr(r.URL.String()[len("multiaddr:"):])
+	if err != nil {
+		return nil, err
+	}
+	addr, isHTTP := normalizeHTTPMultiaddr(addr)
+	if isHTTP {
+		parsed := parseMultiaddr(addr)
+		scheme := "http"
+		if parsed.useHTTPS {
+			scheme = "https"
+		}
+		h.initDefaultRT()
+		rt := h.DefaultClientRoundTripper
+		if parsed.sni != parsed.host {
+			// We have a different host and SNI (e.g. using an IP address but specifying a SNI)
+			// We need to make our own transport to support this.
+			//
+			// TODO: if we end up using this code path a lot, we could maintain
+			// a pool of these transports.  For now though, it's here for
+			// completeness, but I don't expect us to hit it often.
+			rt = rt.Clone()
+			rt.TLSClientConfig.ServerName = parsed.sni
+			defer rt.CloseIdleConnections()
+		}
+
+		r.URL.Scheme = scheme
+		r.URL.Host = parsed.host + ":" + parsed.port
+		return rt.RoundTrip(r)
+	}
+
+	if h.StreamHost == nil {
+		return nil, fmt.Errorf("can not do HTTP over streams. Missing StreamHost")
+	}
+
+	addr, pid := peer.SplitAddr(addr)
+	if pid == "" {
+		return nil, fmt.Errorf("no peer ID in multiaddr")
+	}
+	h.StreamHost.Peerstore().AddAddrs(pid, []ma.Multiaddr{addr}, peerstore.TempAddrTTL)
+
+	srt := streamRoundTripper{
+		server:       pid,
+		skipAddAddrs: true,
+		httpHost:     h,
+		h:            h.StreamHost,
+	}
+	return srt.RoundTrip(r)
 }
 
 // NewConstrainedRoundTripper returns an http.RoundTripper that can fulfill and HTTP
