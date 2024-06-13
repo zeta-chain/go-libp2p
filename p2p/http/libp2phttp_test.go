@@ -772,11 +772,17 @@ func TestHTTPHostAsRoundTripper(t *testing.T) {
 		w.Write([]byte("hello"))
 	}))
 
+	// Uncomment when we get the http-path changes in go-multiaddr
+	// // Different protocol.ID and mounted at a different path
+	// serverHttpHost.SetHTTPHandlerAtPath("/hello-again", "/hello", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// 	w.Write([]byte("hello"))
+	// }))
+
 	go serverHttpHost.Serve()
 	defer serverHttpHost.Close()
 
 	testCases := []string{
-		// Version that has an http-path. Will uncomment when we get the changes in go-multiaddr in
+		// Version that has an http-path. Will uncomment when we get the http-path changes in go-multiaddr
 		// "multiaddr:" + serverHost.Addrs()[0].String() + "/http-path/hello",
 	}
 	for _, a := range serverHttpHost.Addrs() {
