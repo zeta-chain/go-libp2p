@@ -674,11 +674,15 @@ func (h *Host) RoundTrip(r *http.Request) (*http.Response, error) {
 			// completeness, but I don't expect us to hit it often.
 			rt = rt.Clone()
 			rt.TLSClientConfig.ServerName = parsed.sni
-			defer rt.CloseIdleConnections()
 		}
 
-		r.URL.Scheme = scheme
-		r.URL.Host = parsed.host + ":" + parsed.port
+		// TODO add http-path support
+		url := url.URL{
+			Scheme: scheme,
+			Host:   parsed.host + ":" + parsed.port,
+		}
+
+		r.URL = &url
 		return rt.RoundTrip(r)
 	}
 
