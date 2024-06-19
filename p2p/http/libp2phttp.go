@@ -628,7 +628,12 @@ func (h *Host) NamespacedClient(p protocol.ID, server peer.AddrInfo, opts ...Rou
 func (h *Host) initDefaultRT() {
 	h.createDefaultClientRoundTripper.Do(func() {
 		if h.DefaultClientRoundTripper == nil {
-			h.DefaultClientRoundTripper = &http.Transport{}
+			tr, ok := http.DefaultTransport.(*http.Transport)
+			if ok {
+				h.DefaultClientRoundTripper = tr
+			} else {
+				h.DefaultClientRoundTripper = &http.Transport{}
+			}
 		}
 	})
 }
