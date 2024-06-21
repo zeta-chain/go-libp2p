@@ -397,6 +397,12 @@ func TestInsecureConstructor(t *testing.T) {
 	h.Close()
 }
 
+func TestAutoNATv2Service(t *testing.T) {
+	h, err := New(EnableAutoNATv2())
+	require.NoError(t, err)
+	h.Close()
+}
+
 func TestDisableIdentifyAddressDiscovery(t *testing.T) {
 	h, err := New(DisableIdentifyAddressDiscovery())
 	require.NoError(t, err)

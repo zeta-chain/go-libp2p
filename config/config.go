@@ -24,6 +24,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/autonat"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
+	blankhost "github.com/libp2p/go-libp2p/p2p/host/blank"
 	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
@@ -131,6 +132,13 @@ type Config struct {
 	SwarmOpts []swarm.Option
 
 	DisableIdentifyAddressDiscovery bool
+
+	EnableAutoNATv2 bool
+
+	UDPBlackHoleSuccessCounter        *swarm.BlackHoleSuccessCounter
+	CustomUDPBlackHoleSuccessCounter  bool
+	IPv6BlackHoleSuccessCounter       *swarm.BlackHoleSuccessCounter
+	CustomIPv6BlackHoleSuccessCounter bool
 }
 
 func (cfg *Config) makeSwarm(eventBus event.Bus, enableMetrics bool) (*swarm.Swarm, error) {
@@ -165,7 +173,10 @@ func (cfg *Config) makeSwarm(eventBus event.Bus, enableMetrics bool) (*swarm.Swa
 		return nil, err
 	}
 
-	opts := cfg.SwarmOpts
+	opts := append(cfg.SwarmOpts,
+		swarm.WithUDPBlackHoleSuccessCounter(cfg.UDPBlackHoleSuccessCounter),
+		swarm.WithIPv6BlackHoleSuccessCounter(cfg.IPv6BlackHoleSuccessCounter),
+	)
 	if cfg.Reporter != nil {
 		opts = append(opts, swarm.WithMetrics(cfg.Reporter))
 	}
@@ -191,6 +202,77 @@ func (cfg *Config) makeSwarm(eventBus event.Bus, enableMetrics bool) (*swarm.Swa
 	}
 	// TODO: Make the swarm implementation configurable.
 	return swarm.NewSwarm(pid, cfg.Peerstore, eventBus, opts...)
+}
+
+func (cfg *Config) makeAutoNATV2Host() (host.Host, error) {
+	autonatPrivKey, _, err := crypto.GenerateEd25519Key(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	ps, err := pstoremem.NewPeerstore()
+	if err != nil {
+		return nil, err
+	}
+
+	autoNatCfg := Config{
+		Transports:                  cfg.Transports,
+		Muxers:                      cfg.Muxers,
+		SecurityTransports:          cfg.SecurityTransports,
+		Insecure:                    cfg.Insecure,
+		PSK:                         cfg.PSK,
+		ConnectionGater:             cfg.ConnectionGater,
+		Reporter:                    cfg.Reporter,
+		PeerKey:                     autonatPrivKey,
+		Peerstore:                   ps,
+		DialRanker:                  swarm.NoDelayDialRanker,
+		UDPBlackHoleSuccessCounter:  cfg.UDPBlackHoleSuccessCounter,
+		IPv6BlackHoleSuccessCounter: cfg.IPv6BlackHoleSuccessCounter,
+		ResourceManager:             cfg.ResourceManager,
+		SwarmOpts: []swarm.Option{
+			// Don't update black hole state for failed autonat dials
+			swarm.WithReadOnlyBlackHoleDetector(),
+		},
+	}
+	fxopts, err := autoNatCfg.addTransports()
+	if err != nil {
+		return nil, err
+	}
+	var dialerHost host.Host
+	fxopts = append(fxopts,
+		fx.Provide(eventbus.NewBus),
+		fx.Provide(func(lifecycle fx.Lifecycle, b event.Bus) (*swarm.Swarm, error) {
+			lifecycle.Append(fx.Hook{
+				OnStop: func(context.Context) error {
+					return ps.Close()
+				}})
+			sw, err := autoNatCfg.makeSwarm(b, false)
+			return sw, err
+		}),
+		fx.Provide(func(sw *swarm.Swarm) *blankhost.BlankHost {
+			return blankhost.NewBlankHost(sw)
+		}),
+		fx.Provide(func(bh *blankhost.BlankHost) host.Host {
+			return bh
+		}),
+		fx.Provide(func() crypto.PrivKey { return autonatPrivKey }),
+		fx.Provide(func(bh host.Host) peer.ID { return bh.ID() }),
+		fx.Invoke(func(bh *blankhost.BlankHost) {
+			dialerHost = bh
+		}),
+	)
+	app := fx.New(fxopts...)
+	if err := app.Err(); err != nil {
+		return nil, err
+	}
+	err = app.Start(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		<-dialerHost.Network().(*swarm.Swarm).Done()
+		app.Stop(context.Background())
+	}()
+	return dialerHost, nil
 }
 
 func (cfg *Config) addTransports() ([]fx.Option, error) {
@@ -291,6 +373,14 @@ func (cfg *Config) addTransports() ([]fx.Option, error) {
 }
 
 func (cfg *Config) newBasicHost(swrm *swarm.Swarm, eventBus event.Bus) (*bhost.BasicHost, error) {
+	var autonatv2Dialer host.Host
+	if cfg.EnableAutoNATv2 {
+		ah, err := cfg.makeAutoNATV2Host()
+		if err != nil {
+			return nil, err
+		}
+		autonatv2Dialer = ah
+	}
 	h, err := bhost.NewHost(swrm, &bhost.HostOpts{
 		EventBus:                        eventBus,
 		ConnManager:                     cfg.ConnManager,
@@ -306,6 +396,8 @@ func (cfg *Config) newBasicHost(swrm *swarm.Swarm, eventBus event.Bus) (*bhost.B
 		EnableMetrics:                   !cfg.DisableMetrics,
 		PrometheusRegisterer:            cfg.PrometheusRegisterer,
 		DisableIdentifyAddressDiscovery: cfg.DisableIdentifyAddressDiscovery,
+		EnableAutoNATv2:                 cfg.EnableAutoNATv2,
+		AutoNATv2Dialer:                 autonatv2Dialer,
 	})
 	if err != nil {
 		return nil, err
@@ -488,9 +580,8 @@ func (cfg *Config) addAutoNAT(h *bhost.BasicHost) error {
 			Peerstore:          ps,
 			DialRanker:         swarm.NoDelayDialRanker,
 			SwarmOpts: []swarm.Option{
-				// It is better to disable black hole detection and just attempt a dial for autonat
-				swarm.WithUDPBlackHoleConfig(false, 0, 0),
-				swarm.WithIPv6BlackHoleConfig(false, 0, 0),
+				swarm.WithUDPBlackHoleSuccessCounter(nil),
+				swarm.WithIPv6BlackHoleSuccessCounter(nil),
 			},
 		}
 

@@ -364,7 +364,7 @@ func TestBlackHoledAddrBlocked(t *testing.T) {
 	defer s.Close()
 
 	n := 3
-	s.bhd.ipv6 = &blackHoleFilter{n: n, minSuccesses: 1, name: "IPv6"}
+	s.bhd.ipv6 = &BlackHoleSuccessCounter{N: n, MinSuccesses: 1, Name: "IPv6"}
 
 	// All dials to this addr will fail.
 	// manet.IsPublic is aggressive for IPv6 addresses. Use a NAT64 address.

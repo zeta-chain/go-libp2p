@@ -24,6 +24,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
 	"github.com/libp2p/go-libp2p/p2p/host/pstoremanager"
 	"github.com/libp2p/go-libp2p/p2p/host/relaysvc"
+	"github.com/libp2p/go-libp2p/p2p/protocol/autonatv2"
 	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
@@ -105,6 +106,8 @@ type BasicHost struct {
 	caBook                  peerstore.CertifiedAddrBook
 
 	autoNat autonat.AutoNAT
+
+	autonatv2 *autonatv2.AutoNAT
 }
 
 var _ host.Host = (*BasicHost)(nil)
@@ -167,6 +170,8 @@ type HostOpts struct {
 
 	// DisableIdentifyAddressDiscovery disables address discovery using peer provided observed addresses in identify
 	DisableIdentifyAddressDiscovery bool
+	EnableAutoNATv2                 bool
+	AutoNATv2Dialer                 host.Host
 }
 
 // NewHost constructs a new *BasicHost and activates it by attaching its stream and connection handlers to the given inet.Network.
@@ -310,6 +315,13 @@ func NewHost(n network.Network, opts *HostOpts) (*BasicHost, error) {
 		h.pings = ping.NewPingService(h)
 	}
 
+	if opts.EnableAutoNATv2 {
+		h.autonatv2, err = autonatv2.New(h, opts.AutoNATv2Dialer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create autonatv2: %w", err)
+		}
+	}
+
 	n.SetStreamHandler(h.newStreamHandler)
 
 	// register to be notified when the network's listen addrs change,
@@ -398,6 +410,12 @@ func (h *BasicHost) Start() {
 	h.psManager.Start()
 	h.refCount.Add(1)
 	h.ids.Start()
+	if h.autonatv2 != nil {
+		err := h.autonatv2.Start()
+		if err != nil {
+			log.Errorf("autonat v2 failed to start: %s", err)
+		}
+	}
 	go h.background()
 }
 
@@ -1099,6 +1117,9 @@ func (h *BasicHost) Close() error {
 		}
 		if h.hps != nil {
 			h.hps.Close()
+		}
+		if h.autonatv2 != nil {
+			h.autonatv2.Close()
 		}
 
 		_ = h.emitters.evtLocalProtocolsUpdated.Close()
