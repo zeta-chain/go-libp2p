@@ -579,6 +579,7 @@ func (cfg *Config) addAutoNAT(h *bhost.BasicHost) error {
 			PeerKey:            autonatPrivKey,
 			Peerstore:          ps,
 			DialRanker:         swarm.NoDelayDialRanker,
+			ResourceManager:    cfg.ResourceManager,
 			SwarmOpts: []swarm.Option{
 				swarm.WithUDPBlackHoleSuccessCounter(nil),
 				swarm.WithIPv6BlackHoleSuccessCounter(nil),

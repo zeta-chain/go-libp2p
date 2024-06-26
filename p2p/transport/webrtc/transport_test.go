@@ -42,6 +42,27 @@ func getTransport(t *testing.T, opts ...Option) (*WebRTCTransport, peer.ID) {
 	return transport, peerID
 }
 
+func TestNullRcmgrTransport(t *testing.T) {
+	privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
+	require.NoError(t, err)
+	transport, err := New(privKey, nil, nil, nil)
+	require.NoError(t, err)
+
+	listenTransport, pid := getTransport(t)
+	ln, err := listenTransport.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/webrtc-direct"))
+	require.NoError(t, err)
+	go func() {
+		c, err := ln.Accept()
+		if !assert.NoError(t, err) {
+			t.Error(err)
+		}
+		t.Cleanup(func() { c.Close() })
+	}()
+	c, err := transport.Dial(context.Background(), ln.Multiaddr(), pid)
+	require.NoError(t, err)
+	c.Close()
+}
+
 func TestIsWebRTCDirectMultiaddr(t *testing.T) {
 	invalid := []string{
 		"/ip4/1.2.3.4/tcp/10/",
