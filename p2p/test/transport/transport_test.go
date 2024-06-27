@@ -20,7 +20,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	mocknetwork "github.com/libp2p/go-libp2p/core/network/mocks"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/sec"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
@@ -29,8 +31,10 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	libp2pwebrtc "github.com/libp2p/go-libp2p/p2p/transport/webrtc"
+	"go.uber.org/mock/gomock"
 
 	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -685,6 +689,37 @@ func TestDiscoverPeerIDFromSecurityNegotiation(t *testing.T) {
 
 			// and just to double-check try connecting again to make sure it works
 			require.NoError(t, h2.Connect(ctx, *ai))
+		})
+	}
+}
+
+// TestCloseConnWhenBlocked tests that the server closes the connection when the rcmgr blocks it.
+func TestCloseConnWhenBlocked(t *testing.T) {
+	for _, tc := range transportsToTest {
+		if tc.Name == "WebRTC" {
+			continue // WebRTC doesn't have a connection when we block so there's nothing to close
+		}
+		t.Run(tc.Name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockRcmgr := mocknetwork.NewMockResourceManager(ctrl)
+			mockRcmgr.EXPECT().OpenConnection(network.DirInbound, gomock.Any(), gomock.Any()).DoAndReturn(func(network.Direction, bool, ma.Multiaddr) (network.ConnManagementScope, error) {
+				// Block the connection
+				return nil, fmt.Errorf("connections blocked")
+			})
+			mockRcmgr.EXPECT().Close().AnyTimes()
+
+			server := tc.HostGenerator(t, TransportTestCaseOpts{ResourceManager: mockRcmgr})
+			client := tc.HostGenerator(t, TransportTestCaseOpts{NoListen: true})
+			defer server.Close()
+			defer client.Close()
+
+			client.Peerstore().AddAddrs(server.ID(), server.Addrs(), peerstore.PermanentAddrTTL)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := client.NewStream(ctx, server.ID(), ping.ID)
+			require.Error(t, err)
+			require.False(t, errors.Is(err, context.DeadlineExceeded), "expected error to be not be context deadline exceeded")
 		})
 	}
 }
