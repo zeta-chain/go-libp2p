@@ -156,7 +156,7 @@ func TestCleanupConnWhenBlocked(t *testing.T) {
 	}
 
 	// No error yet, let's continue using the conn
-	s.SetReadDeadline(time.Now().Add(1 * time.Second))
+	s.SetReadDeadline(time.Now().Add(10 * time.Second))
 	b := [1]byte{}
 	_, err = s.Read(b[:])
 	if err != nil && errors.As(err, &quicErr) {

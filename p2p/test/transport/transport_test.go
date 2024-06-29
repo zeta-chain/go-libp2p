@@ -33,7 +33,6 @@ import (
 	libp2pwebrtc "github.com/libp2p/go-libp2p/p2p/transport/webrtc"
 	"go.uber.org/mock/gomock"
 
-	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 )
@@ -673,7 +672,7 @@ func TestDiscoverPeerIDFromSecurityNegotiation(t *testing.T) {
 
 			ai := &peer.AddrInfo{
 				ID:    bogusPeerId,
-				Addrs: []multiaddr.Multiaddr{h1.Addrs()[0]},
+				Addrs: []ma.Multiaddr{h1.Addrs()[0]},
 			}
 
 			// Try connecting with the bogus peer ID
