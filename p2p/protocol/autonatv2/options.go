@@ -11,6 +11,7 @@ type autoNATSettings struct {
 	dataRequestPolicy                    dataRequestPolicyFunc
 	now                                  func() time.Time
 	amplificatonAttackPreventionDialWait time.Duration
+	metricsTracer                        MetricsTracer
 }
 
 func defaultSettings() *autoNATSettings {
@@ -32,6 +33,13 @@ func WithServerRateLimit(rpm, perPeerRPM, dialDataRPM int) AutoNATOption {
 		s.serverRPM = rpm
 		s.serverPerPeerRPM = perPeerRPM
 		s.serverDialDataRPM = dialDataRPM
+		return nil
+	}
+}
+
+func WithMetricsTracer(m MetricsTracer) AutoNATOption {
+	return func(s *autoNATSettings) error {
+		s.metricsTracer = m
 		return nil
 	}
 }

@@ -316,7 +316,11 @@ func NewHost(n network.Network, opts *HostOpts) (*BasicHost, error) {
 	}
 
 	if opts.EnableAutoNATv2 {
-		h.autonatv2, err = autonatv2.New(h, opts.AutoNATv2Dialer)
+		var mt autonatv2.MetricsTracer
+		if opts.EnableMetrics {
+			mt = autonatv2.NewMetricsTracer(opts.PrometheusRegisterer)
+		}
+		h.autonatv2, err = autonatv2.New(h, opts.AutoNATv2Dialer, autonatv2.WithMetricsTracer(mt))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create autonatv2: %w", err)
 		}
