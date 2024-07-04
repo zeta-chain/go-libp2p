@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"slices"
 	"sync"
 	"testing"
@@ -730,6 +731,15 @@ func TestLargeIdentifyMessage(t *testing.T) {
 	}
 }
 
+func randString(n int) string {
+	chars := "abcdefghijklmnopqrstuvwxyz"
+	buf := make([]byte, n)
+	for i := 0; i < n; i++ {
+		buf[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(buf)
+}
+
 func TestLargePushMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -738,9 +748,9 @@ func TestLargePushMessage(t *testing.T) {
 	h2 := blhost.NewBlankHost(swarmt.GenSwarm(t))
 
 	// add protocol strings to make the message larger
-	// about 2K of protocol strings
-	for i := 0; i < 500; i++ {
-		r := protocol.ID(fmt.Sprintf("rand%d", i))
+	// about 3K of protocol strings
+	for i := 0; i < 100; i++ {
+		r := protocol.ID(fmt.Sprintf("%s-%d", randString(30), i))
 		h1.SetStreamHandler(r, func(network.Stream) {})
 		h2.SetStreamHandler(r, func(network.Stream) {})
 	}
