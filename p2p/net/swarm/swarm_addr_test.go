@@ -2,25 +2,13 @@ package swarm_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
-	ic "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/test"
-	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
-	circuitv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
-	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
-	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
-	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
-	webtransport "github.com/libp2p/go-libp2p/p2p/transport/webtransport"
 
-	"github.com/minio/sha256-simd"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/multiformats/go-multibase"
-	"github.com/multiformats/go-multihash"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,41 +55,4 @@ func TestAddressesWithoutListening(t *testing.T) {
 	a1, err := s.InterfaceListenAddresses()
 	require.NoError(t, err)
 	require.Empty(t, a1, "expected to be listening on no addresses")
-}
-
-func TestDialAddressSelection(t *testing.T) {
-	priv, _, err := test.RandTestKeyPair(ic.Ed25519, 256)
-	require.NoError(t, err)
-	id, err := peer.IDFromPrivateKey(priv)
-	require.NoError(t, err)
-	s, err := swarm.NewSwarm("local", nil)
-	require.NoError(t, err)
-
-	tcpTr, err := tcp.NewTCPTransport(nil, nil)
-	require.NoError(t, err)
-	require.NoError(t, s.AddTransport(tcpTr))
-	reuse, err := quicreuse.NewConnManager([32]byte{})
-	require.NoError(t, err)
-	defer reuse.Close()
-	quicTr, err := quic.NewTransport(priv, reuse, nil, nil, nil)
-	require.NoError(t, err)
-	require.NoError(t, s.AddTransport(quicTr))
-	webtransportTr, err := webtransport.New(priv, nil, reuse, nil, nil)
-	require.NoError(t, err)
-	require.NoError(t, s.AddTransport(webtransportTr))
-	h := sha256.Sum256([]byte("foo"))
-	hash, err := multihash.Encode(h[:], multihash.SHA2_256)
-	require.NoError(t, err)
-	certHash, err := multibase.Encode(multibase.Base58BTC, hash)
-	require.NoError(t, err)
-	circuitTr, err := circuitv2.New(nil, nil)
-	require.NoError(t, err)
-	require.NoError(t, s.AddTransport(circuitTr))
-
-	require.Equal(t, tcpTr, s.TransportForDialing(ma.StringCast("/ip4/127.0.0.1/tcp/1234")))
-	require.Equal(t, quicTr, s.TransportForDialing(ma.StringCast("/ip4/127.0.0.1/udp/1234/quic")))
-	require.Equal(t, circuitTr, s.TransportForDialing(ma.StringCast(fmt.Sprintf("/ip4/127.0.0.1/udp/1234/quic/p2p-circuit/p2p/%s", id))))
-	require.Equal(t, webtransportTr, s.TransportForDialing(ma.StringCast(fmt.Sprintf("/ip4/127.0.0.1/udp/1234/quic-v1/webtransport/certhash/%s", certHash))))
-	require.Nil(t, s.TransportForDialing(ma.StringCast("/ip4/1.2.3.4")))
-	require.Nil(t, s.TransportForDialing(ma.StringCast("/ip4/1.2.3.4/tcp/443/ws")))
 }

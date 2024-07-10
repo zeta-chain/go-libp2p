@@ -26,7 +26,6 @@ import (
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
 	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
-	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 
 	ma "github.com/multiformats/go-multiaddr"
 	madns "github.com/multiformats/go-multiaddr-dns"
@@ -94,33 +93,6 @@ var NoSecurity Option = func(cfg *Config) error {
 func Muxer(name string, muxer network.Multiplexer) Option {
 	return func(cfg *Config) error {
 		cfg.Muxers = append(cfg.Muxers, tptu.StreamMuxer{Muxer: muxer, ID: protocol.ID(name)})
-		return nil
-	}
-}
-
-func QUICReuse(constructor interface{}, opts ...quicreuse.Option) Option {
-	return func(cfg *Config) error {
-		tag := `group:"quicreuseopts"`
-		typ := reflect.ValueOf(constructor).Type()
-		numParams := typ.NumIn()
-		isVariadic := typ.IsVariadic()
-
-		if !isVariadic && len(opts) > 0 {
-			return errors.New("QUICReuse constructor doesn't take any options")
-		}
-
-		var params []string
-		if isVariadic && len(opts) > 0 {
-			// If there are options, apply the tag.
-			// Since options are variadic, they have to be the last argument of the constructor.
-			params = make([]string, numParams)
-			params[len(params)-1] = tag
-		}
-
-		cfg.QUICReuse = append(cfg.QUICReuse, fx.Provide(fx.Annotate(constructor, fx.ParamTags(params...))))
-		for _, opt := range opts {
-			cfg.QUICReuse = append(cfg.QUICReuse, fx.Supply(fx.Annotate(opt, fx.ResultTags(tag))))
-		}
 		return nil
 	}
 }

@@ -12,10 +12,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/transport"
-	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
-	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 
 	ma "github.com/multiformats/go-multiaddr"
@@ -98,7 +96,6 @@ func TestAutoNATService(t *testing.T) {
 
 func TestDefaultListenAddrs(t *testing.T) {
 	reTCP := regexp.MustCompile("/(ip)[4|6]/((0.0.0.0)|(::))/tcp/")
-	reQUIC := regexp.MustCompile("/(ip)[4|6]/((0.0.0.0)|(::))/udp/([0-9]*)/quic")
 	reCircuit := regexp.MustCompile("/p2p-circuit")
 
 	// Test 1: Setting the correct listen addresses if userDefined.Transport == nil && userDefined.ListenAddrs == nil
@@ -106,7 +103,6 @@ func TestDefaultListenAddrs(t *testing.T) {
 	require.NoError(t, err)
 	for _, addr := range h.Network().ListenAddresses() {
 		if reTCP.FindStringSubmatchIndex(addr.String()) == nil &&
-			reQUIC.FindStringSubmatchIndex(addr.String()) == nil &&
 			reCircuit.FindStringSubmatchIndex(addr.String()) == nil {
 			t.Error("expected ip4 or ip6 or relay interface")
 		}
@@ -179,22 +175,6 @@ func TestTransportConstructorTCP(t *testing.T) {
 	require.NoError(t, err)
 	defer h.Close()
 	require.NoError(t, h.Network().Listen(ma.StringCast("/ip4/127.0.0.1/tcp/0")))
-	err = h.Network().Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic"))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), swarm.ErrNoTransport.Error())
-}
-
-func TestTransportConstructorQUIC(t *testing.T) {
-	h, err := New(
-		Transport(quic.NewTransport),
-		DisableRelay(),
-	)
-	require.NoError(t, err)
-	defer h.Close()
-	require.NoError(t, h.Network().Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic")))
-	err = h.Network().Listen(ma.StringCast("/ip4/127.0.0.1/tcp/0"))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), swarm.ErrNoTransport.Error())
 }
 
 type mockTransport struct{}
@@ -241,14 +221,6 @@ func TestTransportConstructorWithoutOpts(t *testing.T) {
 		require.EqualError(t, err, "transport constructor doesn't take any options")
 		require.False(t, called, "didn't expected constructor to be called")
 	})
-}
-
-func TestTransportConstructorWithWrongOpts(t *testing.T) {
-	_, err := New(
-		Transport(quic.NewTransport, tcp.DisableReuseport()),
-		DisableRelay(),
-	)
-	require.EqualError(t, err, "transport constructor doesn't take any options")
 }
 
 func TestSecurityConstructor(t *testing.T) {

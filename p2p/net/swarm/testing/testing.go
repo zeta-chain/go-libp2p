@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
-
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/control"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -21,7 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
-	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 
 	ma "github.com/multiformats/go-multiaddr"
@@ -157,24 +154,6 @@ func GenSwarm(t *testing.T, opts ...Option) *swarm.Swarm {
 		}
 		if !cfg.dialOnly {
 			if err := s.Listen(ma.StringCast("/ip4/127.0.0.1/tcp/0")); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	if !cfg.disableQUIC {
-		reuse, err := quicreuse.NewConnManager([32]byte{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		quicTransport, err := quic.NewTransport(priv, reuse, nil, cfg.connectionGater, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := s.AddTransport(quicTransport); err != nil {
-			t.Fatal(err)
-		}
-		if !cfg.dialOnly {
-			if err := s.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic")); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -18,8 +18,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
-	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
-	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 
 	ma "github.com/multiformats/go-multiaddr"
@@ -56,21 +54,6 @@ func makeSwarm(t *testing.T) *Swarm {
 		t.Fatal(err)
 	}
 	if err := s.Listen(ma.StringCast("/ip4/127.0.0.1/tcp/0")); err != nil {
-		t.Fatal(err)
-	}
-
-	reuse, err := quicreuse.NewConnManager([32]byte{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	quicTransport, err := quic.NewTransport(priv, reuse, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.AddTransport(quicTransport); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -207,7 +190,7 @@ func TestDialWorkerLoopConcurrentFailure(t *testing.T) {
 
 	_, p2 := newPeer(t)
 
-	s1.Peerstore().AddAddrs(p2, []ma.Multiaddr{ma.StringCast("/ip4/11.0.0.1/tcp/1234"), ma.StringCast("/ip4/11.0.0.1/udp/1234/quic")}, peerstore.PermanentAddrTTL)
+	s1.Peerstore().AddAddrs(p2, []ma.Multiaddr{ma.StringCast("/ip4/11.0.0.1/tcp/1234")}, peerstore.PermanentAddrTTL)
 
 	reqch := make(chan dialRequest)
 	worker := newDialWorker(s1, p2, reqch)
@@ -255,7 +238,7 @@ func TestDialWorkerLoopConcurrentMix(t *testing.T) {
 	defer s2.Close()
 
 	s1.Peerstore().AddAddrs(s2.LocalPeer(), s2.ListenAddresses(), peerstore.PermanentAddrTTL)
-	s1.Peerstore().AddAddrs(s2.LocalPeer(), []ma.Multiaddr{ma.StringCast("/ip4/11.0.0.1/tcp/1234"), ma.StringCast("/ip4/11.0.0.1/udp/1234/quic")}, peerstore.PermanentAddrTTL)
+	s1.Peerstore().AddAddrs(s2.LocalPeer(), []ma.Multiaddr{ma.StringCast("/ip4/11.0.0.1/tcp/1234")}, peerstore.PermanentAddrTTL)
 
 	reqch := make(chan dialRequest)
 	worker := newDialWorker(s1, s2.LocalPeer(), reqch)
