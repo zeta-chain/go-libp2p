@@ -19,7 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	csms "github.com/libp2p/go-libp2p/p2p/net/conn-security-multistream"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
-	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 
 	ma "github.com/multiformats/go-multiaddr"
@@ -56,17 +55,6 @@ func makeSwarm(t *testing.T) *Swarm {
 		t.Fatal(err)
 	}
 	if err := s.Listen(ma.StringCast("/ip4/127.0.0.1/tcp/0")); err != nil {
-		t.Fatal(err)
-	}
-
-	quicTransport, err := quic.NewTransport(priv, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.AddTransport(quicTransport); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic")); err != nil {
 		t.Fatal(err)
 	}
 
